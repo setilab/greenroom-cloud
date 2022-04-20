@@ -1,0 +1,208 @@
+#!/usr/bin/env python3
+
+import os
+from datetime import date,datetime,timedelta
+import time
+import cherrypy
+import requests
+import redis
+import json
+import psycopg
+from auth import *
+
+
+# Redis
+RHOST    =     os.getenv("REDIS_SERVICE_HOST", "redis.tgr.svc.cluster.local")
+RPORT    = int(os.getenv("REDIS_SERVICE_PORT", "6379"))
+
+# Requests 
+REQHOST  =     os.getenv("CLIENT_API_REQUESTS_SERVICE_HOST", "client-api-requests.tgr.svc.cluster.local")
+REQPORT  =     os.getenv("CLIENT_API_REQUESTS_SERVICE_PORT", "8080")
+REQAPI   =     os.getenv("CLIENT_API_REQUESTS_API_VERSION", "v2")
+
+CLIENT_URL = "http://" + REQHOST + ":" + REQPORT + "/" + REQAPI + "/"
+
+
+@cherrypy.expose
+class Settings_v1(object):
+
+    def __init__(self):
+        self.environmental = EnvSetting_v1()
+        self.alarms = AlarmSetting_v1()
+
+    @cherrypy.tools.json_out()
+    def GET(self, controllerid):
+
+        accountid = AuthSession()
+
+        if accountid == None:
+            raise cherrypy.HTTPError(401, "Requires authentication.")
+            return
+
+        try:
+            keyStore = redis.Redis(host=RHOST, port=RPORT, db=0, decode_responses=True)
+        except:
+            print("ERROR: Unable to connect to Redis service at {}:{}".format(RHOST, RPORT))
+            raise cherrypy.HTTPError(502)
+            return
+
+        key = "controller.account.id." + controllerid
+        if keyStore.exists(key):
+            if not accountid == keyStore.get(key):
+                raise cherrypy.HTTPError(403, "Unauthorized access.")
+                return
+        else:
+            raise cherrypy.HTTPError(404, "Controller id not found.")
+            return
+
+        session = requests.Session()
+
+        request = {'request':{'method':'GET','url':'settings'}}
+
+        try:
+            response = session.post(CLIENT_URL + "requests/" + controllerid, json=request)
+        except:
+            print("ERROR: Unable to connect to Controller API service at: {}".format(CLIENT_URL))
+            raise cherrypy.HTTPError(502)
+            return
+        else:
+            if response.ok:
+                job = json.loads(response.text)
+                jobId = job["jobid"]
+            else:
+                print("ERROR: Unexpected response from Controller API service: {}".format(response))
+                raise cherrypy.HTTPError(502)
+                return
+
+            status = ""
+            tries = 0
+            while True:
+                try:
+                    response = session.get(CLIENT_URL + "requests/" + controllerid +
+                                           "?jobId=" + jobId)
+                except:
+                    print("ERROR: Unable to connect to Controller API service at: {}".format(CLIENT_URL))
+                    raise cherrypy.HTTPError(502)
+                    return
+                else:
+                    if response.ok:
+                        results = json.loads(response.text)
+                        status = results["job"]
+                        if status == "completed":
+                            response = results["response"]
+                            break
+
+                    if tries == 5:
+                        print("ERROR: Max tries awaiting response from Controller API service.")
+                        raise cherrypy.HTTPError(502)
+                        return
+                    else:
+                        tries = tries + 1
+
+                    time.sleep(2)
+
+            if status == "completed":
+                if response["status_code"] == 200:
+                    return response["body"]
+                else:
+                    print("ERROR: Unexpected response from Controller API service: {}".format(response))
+                    raise cherrypy.HTTPError(502)
+                    return
+
+
+@cherrypy.expose
+@cherrypy.popargs('setting', 'value')
+class EnvSetting_v1(object):
+
+    def PUT(self, controllerid, setting, value):
+
+        accountid = AuthSession()
+
+        if accountid == None:
+            raise cherrypy.HTTPError(401, "Requires authentication.")
+            return
+
+        try:
+            keyStore = redis.Redis(host=RHOST, port=RPORT, db=0, decode_responses=True)
+        except:
+            print("ERROR: Unable to connect to Redis service at {}:{}".format(RHOST, RPORT))
+            raise cherrypy.HTTPError(502)
+            return
+
+        key = "controller.account.id." + controllerid
+        if keyStore.exists(key):
+            if not accountid == keyStore.get(key):
+                raise cherrypy.HTTPError(403, "Unauthorized access.")
+                return
+        else:
+            raise cherrypy.HTTPError(404, "Controller id not found.")
+            return
+
+        session = requests.Session()
+
+        request = {'request':{'method':'PUT','url':'settings/environmental/' + setting + "/" + value}}
+
+        try:
+            response = session.post(CLIENT_URL + "requests/" + controllerid, json=request)
+        except:
+            print("ERROR: Unable to connect to Controller API at: {}".format(CLIENT_URL + "requests/"))
+            raise cherrypy.HTTPError(502)
+            return
+        else:
+            if response.ok:
+                job = json.loads(response.text)
+                jobId = job["jobid"]
+            else:
+                print("ERROR: Unexpected response from Controller API service: {}".format(response))
+                raise cherrypy.HTTPError(502)
+                return
+
+            status = ""
+            tries = 0
+            while True:
+                try:
+                    response = session.get(CLIENT_URL + "requests/" + controllerid +
+                                           "?jobId=" + jobId)
+                except:
+                    print("ERROR: Unable to connect to Controller API at: {}".format(CLIENT_URL + "requests/"))
+                    raise cherrypy.HTTPError(502)
+                    return
+                else:
+                    if response.ok:
+                        results = json.loads(response.text)
+                        status = results["job"]
+                        if status == "completed":
+                            response = results["response"]
+                            break
+
+                    if tries == 5:
+                        print("ERROR: Max tries awaiting response from controller API.")
+                        raise cherrypy.HTTPError(502)
+                        return
+                    else:
+                        tries = tries + 1
+
+                    time.sleep(2)
+
+            if status == "completed":
+                if response["status_code"] == 202:
+    
+                    if grow["active"] == True and active == "no":
+                        key = "controller.grow.id." + controllerid
+                        if keyStore.exists(key):
+                            if growid == keyStore.get(key):
+                                keyStore.delete(key)
+
+                    elif active == "yes":
+                        key = "controller.grow.id." + controllerid
+                        keyStore.set(key, growid)
+                        keyStore.persist(key)
+                else:
+                    print("ERROR: Unexpected response from Controller API: {}".format(response))
+                    raise cherrypy.HTTPError(502)
+                    return
+
+        cherrypy.response.status = 202
+        return
+
+

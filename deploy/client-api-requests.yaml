@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: client-api-requests-config
+  namespace: tgr
+data:
+  TGR_API_BUILD: "1.001"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: client-api-requests
+  namespace: tgr
+  labels:
+    app: client-api-requests
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      protocol: TCP
+      targetPort: 8080
+      nodePort: 32002
+  selector:
+    app: client-api-requests
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-api-requests
+  namespace: tgr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client-api-requests
+  template:
+    metadata:
+      labels:
+        app: client-api-requests
+    spec:
+      containers:
+      - name: client-api-requests
+        image: cragginstylie/tgr.client.api.requests:arm64-v1.1
+        imagePullPolicy: Always
+        envFrom:
+        - configMapRef:
+            name: client-api-requests-config
+        ports:
+        - containerPort: 8080
+          protocol: TCP

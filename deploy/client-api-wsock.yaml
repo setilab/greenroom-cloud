@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: client-api-wsock-config
+  namespace: tgr
+data:
+  TGR_API_BUILD: "1.00"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: client-api-wsock
+  namespace: tgr
+  labels:
+    app: client-api-wsock
+spec:
+  type: NodePort
+  ports:
+    - port: 9000
+      protocol: TCP
+      targetPort: 9000
+      nodePort: 32003
+  selector:
+    app: client-api-wsock
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-api-wsock
+  namespace: tgr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client-api-wsock
+  template:
+    metadata:
+      labels:
+        app: client-api-wsock
+    spec:
+      containers:
+      - name: client-api-wsock
+        image: cragginstylie/tgr.client.api.wsock:arm64-v1.0
+        imagePullPolicy: Always
+        envFrom:
+        - configMapRef:
+            name: client-api-wsock-config
+        ports:
+        - containerPort: 9000
+          protocol: TCP

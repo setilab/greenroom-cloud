@@ -1,0 +1,5 @@
+cd ..
+docker build -t tgr.controller.events.requests:arm64-v1.0 -f containers/apis/controller/requests/events/Dockerfile src/apis/controller/requests/events
+docker tag tgr.controller.events.requests:arm64-v1.0 cragginstylie/tgr.controller.events.requests:arm64-v1.0
+docker push cragginstylie/tgr.controller.events.requests:arm64-v1.0
+cd -

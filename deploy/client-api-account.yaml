@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: client-api-account-config
+  namespace: tgr
+data:
+  TGR_API_BUILD: "1.001"
+  POSTGRES_SERVICE_HOST: "postgres.tgr.svc.cluster.local"
+  POSTGRES_SERVICE_PORT: "5432"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: postgres-secrets
+  namespace: tgr
+data:
+  POSTGRES_PASSWORD: dGhlZ3JlZW5yb29t
+stringData:
+  POSTGRES_USER: pgadmin
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: client-api-account
+  namespace: tgr
+  labels:
+    app: client-api-account
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      protocol: TCP
+      targetPort: 8080
+      nodePort: 32000
+  selector:
+    app: client-api-account
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: client-api-nfs-pvc
+  namespace: tgr
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "managed-nfs-storage"
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-api-account
+  namespace: tgr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client-api-account
+  template:
+    metadata:
+      labels:
+        app: client-api-account
+    spec:
+      volumes:
+      - name: client-api-nfs
+        persistentVolumeClaim:
+          claimName: client-api-nfs-pvc
+      containers:
+      - name: client-api-account
+        image: cragginstylie/tgr.client.api.account:arm64-v1.0
+        imagePullPolicy: Always
+        envFrom:
+        - configMapRef:
+            name: client-api-account-config
+        - secretRef:
+            name: postgres-secrets
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        volumeMounts:
+        - name: client-api-nfs
+          mountPath: /data

@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: client-api-controllers-config
+  namespace: tgr
+data:
+  TGR_API_BUILD: "1.001"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: client-api-controllers
+  namespace: tgr
+  labels:
+    app: client-api-controllers
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      protocol: TCP
+      targetPort: 8080
+      nodePort: 32001
+  selector:
+    app: client-api-controllers
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: client-api-nfs-pvc
+  namespace: tgr
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "managed-nfs-storage"
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: client-api-controllers
+  namespace: tgr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: client-api-controllers
+  template:
+    metadata:
+      labels:
+        app: client-api-controllers
+    spec:
+      volumes:
+      - name: client-api-nfs
+        persistentVolumeClaim:
+          claimName: client-api-nfs-pvc
+      containers:
+      - name: client-api-controllers
+        image: cragginstylie/tgr.client.api.controllers:arm64-v1.0
+        imagePullPolicy: Always
+        envFrom:
+        - configMapRef:
+            name: client-api-controllers-config
+        ports:
+        - containerPort: 8080
+          protocol: TCP
+        volumeMounts:
+        - name: client-api-nfs
+          mountPath: /data

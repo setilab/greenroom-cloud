@@ -1,0 +1,5 @@
+cd ..
+docker build -t tgr.client.api.account:arm64-v1.0 -f containers/apis/client/account/api/Dockerfile src/apis/client/account/api
+docker tag tgr.client.api.account:arm64-v1.0 cragginstylie/tgr.client.api.account:arm64-v1.0
+docker push cragginstylie/tgr.client.api.account:arm64-v1.0
+cd -
